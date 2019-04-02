@@ -153,7 +153,7 @@ class SignalFrame:
 
             noise_level : float
                 Noise level applied to amplitude of truncated normal law as follow:
-                    noise_level * max(A0)
+                    noise_level * max(a0)
                 In case of signal composed of several frequencies, noise level is computed from the maximum amplitude.
 
             mean : float
@@ -189,6 +189,8 @@ class SignalFrame:
 
         else:
             self.temporal = signal_noiseless
+
+        self.fft()
 
         if plot and noise_level != 0:
 
@@ -228,13 +230,14 @@ class SignalFrame:
             plt.subplot(211)
             plt.plot(signal_noiseless)
             plt.xlim((0, 250))
-            plt.title(f'Signal avec amplitude = {A0}, fréquence = {f0}, \n  fe = {fe}, points d\'échantillonage = {self.signal_length}')
+            plt.title(f'Signal avec amplitude = {a0}, fréquence = {f0}, \n  fe = {fe}, '
+                      f'points d\'échantillonage = {self.signal_length}')
             plt.xlabel('Temps [s]')
             plt.ylabel('Amplitude')
 
             plt.subplot(212)
             plt.title(f'Base de Fourier')
-            plt.plot(fft(self.temporal)/self.signal_length)
+            plt.plot(self.freq.real/self.signal_length)
             plt.xlabel('Fréquence [Hz]')
             plt.ylabel('Amplitude')
 
@@ -380,3 +383,5 @@ class SignalFrame:
                   f'Definition du signal initial : {n_signal_t_trunc} \n'
                   f'Définition du signal échantilloné : {n_signal_t_sampled}\n'
                   f'Taux d\'échantillonnage : {rate:.3f}')
+
+        return print(f'Sampling performed : {len(self.temporal_sampled)} instants'), self.phi

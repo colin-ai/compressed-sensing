@@ -8,20 +8,29 @@ from scipy.sparse import csr_matrix
 
 
 class SignalFrame:
-    """ CompressSesing class provides tools to read wav signal, compress it and
-    recovered original signal with L1-minimimazation solver
+    """ SignalFrame class provides tools to read wave signal, generate periodic signal with or without noise
+    and perform a random sampling
 
     Attributes
     ----------
 
     temporal : bytearray, shape = [signal_length]
-        Return temporal signal from wav format to 1-D numpy array.
+        Signal in temporal basis.
+
+    temporal_sampled : bytearray, shape = [signal_length]
+        Sampled signal in temporal basis.
 
     freq : bytearray
-        Fast Fourier transformation of temporal, express in frequency basis.
+        Signal in frequency basis.
+
+    freq_sampled : bytearray
+        Sampled signal in frequency basis.
 
     signal_length : int
-        Number of frames of intial signal.
+        Number of frames on source signal.
+
+    phi : scipy.sparse.csr_matrix object with rate*signal_length elements
+        Sampling matrix in compressed sparse row matrix format.
 
     """
 
@@ -322,8 +331,6 @@ class SignalFrame:
                 sampling_instants : array of shape = [rate*signal_length]
                     Sampling instants of input signal.
 
-                phi : scipy.sparse.csr_matrix object with rate*signal_length elements
-                    Sampling matrix in compressed sparse row matrix format.
 
         """
 

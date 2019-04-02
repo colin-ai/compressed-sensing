@@ -10,7 +10,15 @@ class L1min:
 
     x^hat = argmin_x |y-Ax|^2 + |x|_1
 
+    Attributes
+    ----------
+    _objective_fct : list
+        Values of objective fonction at each iteration
+
+    _l1_norm : list
+        Values of norm L1 at each iteration
     """
+
     def __init__(self):
         self._objective_fct = list()
         self._l1_norm = list()

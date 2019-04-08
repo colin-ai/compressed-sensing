@@ -2,7 +2,7 @@ import wave
 import numpy as np
 import matplotlib.pyplot as plt
 
-from scipy.fftpack import fft, ifft
+from scipy.fftpack import fft, ifft, fftshift
 from scipy.stats import truncnorm
 from scipy.sparse import csr_matrix
 
@@ -94,46 +94,7 @@ class SignalFrame:
 
         return cos
 
-    # @staticmethod
-    # def verbose_plot(*args):
-    #     """
-    #
-    #     Parameters
-    #     ----------
-    #     y_data :
-    #     figsize : tuple of int, shape = (width, height)
-    #         size of matplotlib figure object
-    #     titles : list of str
-    #     x_axis :
-    #     xlabel :
-    #     ylabel :
-    #     xlim :
-    #     ylim :
-    #
-    #     Returns
-    #     -------
-    #     plot :
-    #
-    #     """
-    #
-    #
-    #     n_plot = len(y_data)
-    #     plt.figure(figsize)
-    #
-    #     if not x_axis:
-    #         x_axis = range(y_data)
-    #
-    #     for i, y in enumerate(y_data):
-    #         plt.subplot(n_plot+1+i)
-    #         plt.plot(x_axis[i], y)
-    #         plt.title(titles[i])
-    #         plt.ylim(ylim)
-    #         plt.xlim(xlim)
-    #         plt.xlabel(xlabel[i])
-    #         plt.ylabel(ylabel[i])
-
-    def signal_gen(self, a0=[1, 10], f0=[10, 100], fe=1000, t=1, noise_level=0, mean=0, std=1,
-                   plot=False):
+    def signal_gen(self, a0=[1, 10], f0=[10, 100], fe=1000, t=1, noise_level=0, mean=0, std=1, plot=False):
         """ Create a periodic signal with 1 or more cosinus.
             Noise generated from truncated normal law may be add.
 
@@ -235,9 +196,12 @@ class SignalFrame:
             plt.xlabel('Temps [s]')
             plt.ylabel('Amplitude')
 
+            signal_f_std = self.freq / self.signal_length
+            x_frequencies = np.arange(-self.signal_length / 2, self.signal_length / 2)
+
             plt.subplot(212)
             plt.title(f'Base de Fourier')
-            plt.plot(self.freq.real/self.signal_length)
+            plt.plot(x_frequencies, signal_f_std)
             plt.xlabel('Fréquence [Hz]')
             plt.ylabel('Amplitude')
 
@@ -248,7 +212,7 @@ class SignalFrame:
 
         """
 
-        self.freq = fft(self.temporal)
+        self.freq = fftshift(fft(self.temporal))
 
     def ifft(self):
         """ Compute inverse fast Fourier transformation of frequency signal.
@@ -296,10 +260,10 @@ class SignalFrame:
 
         if basis == 'freq':
             signal_f_std = self.freq / self.signal_length
-            X_frequencies = np.arange(-self.signal_length / 2, self.signal_length / 2)
+            x_frequencies = np.arange(-self.signal_length/2, self.signal_length/2)
 
             plt.figure(figsize=(10, 6))
-            plt.plot(X_frequencies, abs(signal_f_std))
+            plt.plot(x_frequencies, abs(signal_f_std))
             plt.title('Signal en base fréquentielle', fontsize=15)
             plt.xlabel('Fréquence [Hz]', fontsize=15)
             plt.ylabel('Amplitude', fontsize=15)

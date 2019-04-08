@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from scipy.fftpack import fft, ifft
+from scipy.fftpack import fft, ifft, fftshift
 
 
 class L1min:
@@ -64,12 +64,11 @@ class L1min:
         objective_fct = list()
         l1_norm = list()
         objective_fct.append(cv_criterium + 1)
-        c = 1 / signal_length
 
         while iteration < max_iter and objective_fct[iteration] > cv_criterium:
 
             f1 = phi @ ifft(x_hat)
-            grad = fft(phi.T @ f1) * c - np.real(fft(phi.T @ y) * c)
+            grad = fft(phi.T @ f1) - np.real(fft(phi.T @ y))
             z = x_hat - gamma * grad
             x_hat = x_hat + lambda_n * \
                     (self.soft_threshold(np.real(z), w) + 1j * self.soft_threshold(np.imag(z), w) - x_hat)
@@ -88,14 +87,14 @@ class L1min:
 
             iteration += 1
 
-        signal_freq_recovered = x_hat
+        signal_freq_recovered = fftshift(x_hat)
 
         if plot_result:
 
             plt.figure(figsize=(14, 10))
 
-            plt.subplot(221)
-            plt.plot(objective_fct, label='Fonction objective')
+            plt.subplot(221, label='Objective function')
+            plt.plot(objective_fct)
             plt.xticks(label='Iteration')
 
             plt.subplot(222)
@@ -106,7 +105,9 @@ class L1min:
             plt.xticks(label='Iteration')
 
             plt.subplot(224)
-            plt.plot(signal_freq_recovered, label='Signal reconstruit')
+            x_frequencies = np.arange(-signal_length/2, signal_length/2)
+            signal_freq_recovered_std = signal_freq_recovered / signal_length
+            plt.plot(x_frequencies, signal_freq_recovered_std, label='Signal reconstruit')
 
             plt.show()
 
@@ -152,7 +153,7 @@ class L1min:
         plt.ylabel('Amplitude', fontsize=15)
         plt.legend()
 
-        plt.plot(x_frequencies, abs(signal_freq_recovered.real),
+        plt.plot(x_frequencies, abs(signal_freq_std),
                  label=f'Signal recovered, with {np.linalg.norm(signal_freq_recovered, 0)} values', linestyle=':')
         plt.legend()
 
@@ -162,7 +163,7 @@ class L1min:
         plt.ylabel('Amplitude', fontsize=15)
         plt.legend()
 
-        plt.plot(x_frequencies, ifft(signal_freq_recovered), label='Signal recovered', linestyle=':')
+        plt.plot(x_frequencies, ifft(signal_freq_recovered), label='Signal recovered', linestyle='-')
         plt.legend()
 
         plt.show()

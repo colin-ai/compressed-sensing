@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from scipy.fftpack import fft, ifft, fftshift
+from scipy.fftpack import fft, ifft, fftshift, ifftshift
 
 
 class L1min:
@@ -53,6 +53,8 @@ class L1min:
                 Signal recovered expressed in temporal basis
 
         """
+
+        # TODO : add Lipshitz to regularization w such as w = lambda / L
 
         # Initialisation du x_hat = signal à reconstruire en frequentiel
         signal_length = phi.get_shape()[1]
@@ -107,7 +109,7 @@ class L1min:
             plt.subplot(224)
             x_frequencies = np.arange(-signal_length/2, signal_length/2)
             signal_freq_recovered_std = signal_freq_recovered / signal_length
-            plt.plot(x_frequencies, signal_freq_recovered_std, label='Signal reconstruit')
+            plt.plot(x_frequencies, abs(signal_freq_recovered_std), label='Signal reconstruit')
 
             plt.show()
 
@@ -140,14 +142,23 @@ class L1min:
         signal_length = len(signal_freq_recovered)
 
         signal_temporal = signal_temporal[:len(signal_freq_recovered)]
-        signal_freq_trunc = fft(signal_temporal)
-
-        signal_freq_std = signal_freq_trunc/signal_length
         x_frequencies = np.arange(-signal_length/2, signal_length/2)
 
         plt.figure(figsize=(14, 10))
 
         plt.subplot(211)
+        plt.plot(x_frequencies, signal_temporal, label='Signal to recover')
+        plt.xlabel('Time [s]', fontsize=15)
+        plt.ylabel('Amplitude', fontsize=15)
+        plt.legend()
+
+        plt.plot(x_frequencies, ifft(ifftshift(signal_freq_recovered)), label='Signal recovered', linestyle='-')
+        plt.legend()
+
+        signal_freq_trunc = fftshift(fft(signal_temporal))
+        signal_freq_std = signal_freq_trunc/signal_length
+
+        plt.subplot(212)
         plt.plot(x_frequencies, abs(signal_freq_std), label='Signal to recover')
         plt.xlabel('Frequency [Hz]', fontsize=15)
         plt.ylabel('Amplitude', fontsize=15)
@@ -155,15 +166,6 @@ class L1min:
 
         plt.plot(x_frequencies, abs(signal_freq_std),
                  label=f'Signal recovered, with {np.linalg.norm(signal_freq_recovered, 0)} values', linestyle=':')
-        plt.legend()
-
-        plt.subplot(212)
-        plt.plot(x_frequencies, signal_temporal, label='Signal to recover')
-        plt.xlabel('Time [s]', fontsize=15)
-        plt.ylabel('Amplitude', fontsize=15)
-        plt.legend()
-
-        plt.plot(x_frequencies, ifft(signal_freq_recovered), label='Signal recovered', linestyle='-')
         plt.legend()
 
         plt.show()

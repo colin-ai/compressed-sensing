@@ -131,6 +131,8 @@ class SignalFrame:
             -------
         """
 
+        # TODO : warning take real of part fft
+
         self.signal_length = int(t*fe)
         signal_noiseless = np.zeros(self.signal_length).astype(float)
         n_cos = len(a0)
@@ -179,9 +181,11 @@ class SignalFrame:
             plt.xlabel('Temps [s]')
             plt.ylabel('Amplitude')
 
+            x_frequencies = np.arange(-self.signal_length/2, self.signal_length/2)
+
             plt.subplot(414)
             plt.title(f'Base de Fourier')
-            plt.plot(fft(self.temporal)/self.signal_length)
+            plt.plot(x_frequencies, fftshift(fft(self.temporal))/self.signal_length)
             plt.xlabel('Fréquence [Hz]')
             plt.ylabel('Amplitude')
 

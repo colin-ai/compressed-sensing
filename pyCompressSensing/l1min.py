@@ -12,7 +12,7 @@ class L1min:
     """
 
     def solver(self, signal_sampled, phi, lambda_n=1, gamma=0.5, w=100, max_iter=100,
-               cv_criterium=1e-3, verbose=0, plot_result=False):
+               cv_criterium=1e-3, observation_time=1, verbose=0, plot=False):
         """ Algorithm for OLS minimization with L1-constraint
 
             x^hat = argmin_x |y-Ax|^2 + |x|_1
@@ -39,6 +39,10 @@ class L1min:
 
             cv_criterium : float (default 1e-3)
                 Convergence criterium on target fonction
+
+            observation_time : float
+                Obervation time of signal, used for x axis.
+                If unknown, time and frequencies axis will not be revelant
 
             verbose : boolean (default=0)
                 If verbose=1, displays parameters of sampling and truncated normal law.
@@ -80,36 +84,33 @@ class L1min:
 
             if verbose:
                 print('Iteration : ', iteration)
-                #   print(f'Data fidelity: {data_fidel[iteration]}')
-                #   print(f'Norme1 de X_hat: {Xhat_L1[iteration]}\n')
-                print(f'{iteration} : {objective_fct[iteration]:}')
-                #    print('grad :',np.linalg.norm(grad,2))
-                #    print('Z :',np.linalg.norm(Z,2))
+                print(f'Data fidelity : {objective_fct[iteration]}')
+                print(f'L1-norm of X_hat : {l1_norm[iteration]}\n')
                 print('\n')
 
             iteration += 1
 
         signal_freq_recovered = fftshift(x_hat)
 
-        if plot_result:
+        if plot:
 
             plt.figure(figsize=(14, 10))
 
-            plt.subplot(221, label='Objective function')
+            plt.subplot(221, title='Objective function')
             plt.plot(objective_fct)
-            plt.xticks(label='Iteration')
+            plt.xlabel('Iteration')
 
-            plt.subplot(222)
-            plt.hist(np.abs(signal_freq_recovered.real), bins=50, label='Histogramme du signal reconstruit')
+            plt.subplot(222, title='Histogram of recovered signal')
+            plt.hist(np.abs(signal_freq_recovered.real), bins=50)
 
-            plt.subplot(223)
-            plt.plot(l1_norm, label='Norme L1 de X_hat')
-            plt.xticks(label='Iteration')
+            plt.subplot(223, title='L1-norm of recovered signal')
+            plt.plot(l1_norm)
+            plt.xlabel('Iteration')
 
-            plt.subplot(224)
-            x_frequencies = np.arange(-signal_length/2, signal_length/2)
+            plt.subplot(224, title='Recovered signal in frequency basis')
+            f_grid = np.arange(-signal_length/2, signal_length/2)/observation_time
             signal_freq_recovered_std = signal_freq_recovered / signal_length
-            plt.plot(x_frequencies, abs(signal_freq_recovered_std), label='Signal reconstruit')
+            plt.plot(f_grid, abs(signal_freq_recovered_std))
 
             plt.show()
 
@@ -122,7 +123,7 @@ class L1min:
         return np.sign(x) * np.maximum(np.abs(x) - w, 0.)
 
     @staticmethod
-    def plot_score(signal_temporal, signal_freq_recovered):
+    def plot_score(signal_temporal, signal_freq_recovered, observation_time=1):
         """ Plot curves of signal recovered on signal to recover.
 
                     Parameters
@@ -133,6 +134,10 @@ class L1min:
                     signal_freq_recovered : bytearray
                         Recovered signal in frequency basis
 
+                    observation_time : float, default = 1
+                        Obervation time of signal, used for x axis.
+                        If unknown, time and frequencies axis will not be revelant
+
                     Returns
                     -------
                     Plot curves of signal recovered on signal to recover with matplotlib
@@ -141,31 +146,38 @@ class L1min:
 
         signal_length = len(signal_freq_recovered)
 
+        observation_time = len(signal_freq_recovered) / len(signal_temporal)*observation_time
         signal_temporal = signal_temporal[:len(signal_freq_recovered)]
-        x_frequencies = np.arange(-signal_length/2, signal_length/2)
+
+        t_grid = np.linspace(0, observation_time, signal_length)
 
         plt.figure(figsize=(14, 10))
 
         plt.subplot(211)
-        plt.plot(x_frequencies, signal_temporal, label='Signal to recover')
-        plt.xlabel('Time [s]', fontsize=15)
-        plt.ylabel('Amplitude', fontsize=15)
+        plt.plot(t_grid, signal_temporal, label='Signal to recover', linewidth=3)
+        plt.xlabel('Time [s]', fontsize=12)
+        plt.ylabel('Amplitude', fontsize=12)
+        plt.xlim((t_grid[0], t_grid[200]))
         plt.legend()
 
-        plt.plot(x_frequencies, ifft(ifftshift(signal_freq_recovered)), label='Signal recovered', linestyle='-')
+        plt.plot(t_grid, ifft(ifftshift(signal_freq_recovered)), label='Signal recovered', linestyle='--', linewidth=3)
         plt.legend()
 
+        f_grid = np.arange(0, int(signal_length/2+1))/observation_time
         signal_freq_trunc = fftshift(fft(signal_temporal))
+        signal_freq_std_ref = signal_freq_trunc/signal_length
+
+        signal_freq_trunc = signal_freq_recovered
         signal_freq_std = signal_freq_trunc/signal_length
 
         plt.subplot(212)
-        plt.plot(x_frequencies, abs(signal_freq_std), label='Signal to recover')
-        plt.xlabel('Frequency [Hz]', fontsize=15)
-        plt.ylabel('Amplitude', fontsize=15)
-        plt.legend()
+        plt.plot(f_grid, abs(signal_freq_std_ref[int(signal_length/2):signal_length]),
+                 label='Signal to recover', linewidth=3)
 
-        plt.plot(x_frequencies, abs(signal_freq_std),
-                 label=f'Signal recovered, with {np.linalg.norm(signal_freq_recovered, 0)} values', linestyle=':')
+        plt.plot(f_grid, abs(signal_freq_std[int(signal_length/2):signal_length]),
+                 label=f'Signal recovered, with {np.linalg.norm(signal_freq_recovered, 0)} values',
+                 linestyle=':', linewidth=3)
+        plt.xlabel('Frequency [Hz]', fontsize=12)
+        plt.ylabel('Amplitude', fontsize=12)
         plt.legend()
-
         plt.show()

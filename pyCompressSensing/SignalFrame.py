@@ -1,11 +1,11 @@
 import wave
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.gridspec as gridspec
 
 from scipy.fftpack import fft, ifft, fftshift, ifftshift, rfft, irfft
-from scipy.stats import truncnorm
+from scipy.stats import truncnorm, uniform
 from scipy.sparse import csr_matrix
+from scipy.signal import detrend
 
 
 class SignalFrame:
@@ -68,7 +68,15 @@ class SignalFrame:
         self.temporal = np.frombuffer(frames, dtype=np.int16)  # 1-D numpy array
         wf.close()
 
+        if not np.rint((np.mean(self.temporal))) :
+            print('Warning : DC bias (Mean of signal) is not null. \n'
+                  'DC bias will affect FT with non null amplitude at freq = 0. \n'
+                  'It is recommended to apply detrend() method to signal or remove mean manually.\n')
+
         return self
+
+    def detrend(self, signal):
+        self.temporal = detrend(self.temporal)
 
     @staticmethod
     def cos_gen(a, f, t_grid):
@@ -98,18 +106,18 @@ class SignalFrame:
 
     def noise(self, noise_level, signal_ampltiude, std):
         """
-        Generate nosie from truncated normal law
+        Generate nosie from truncated normal distribution
 
         Parameters
         ----------
         noise_level : float
-            Noise level applied to amplitude of truncated normal law as follow:
+            Noise level applied to amplitude of truncated normal distribution as follow:
                 noise_level * max(a)
             In case of signal composed of several frequencies,
             noise level is computed from the maximum amplitude.
 
         std : float
-            Standard deviation of truncated normal law
+            Standard deviation of truncated normal distribution
 
         signal_ampltiude: bytearray, float or int
             Signal amplitude(s)
@@ -134,7 +142,7 @@ class SignalFrame:
             Because of Fast Fourier Transform applied to temporal signal,
              this function is most efficient when n is a power of two, and least efficient when n is prime.
 
-            Noise generated from truncated normal law may be add.
+            Noise generated from truncated normal distribution may be add.
 
             Parameters
             ----------
@@ -148,12 +156,12 @@ class SignalFrame:
                 Observation time of signal
 
             noise_level : float
-                Noise level applied to amplitude of truncated normal law as follow:
+                Noise level applied to amplitude of truncated normal distribution as follow:
                     noise_level * max(a)
                 In case of signal composed of several frequencies, noise level is computed from the maximum amplitude.
 
             std : float
-                Standard deviation of truncated normal law
+                Standard deviation of truncated normal distribution
 
             plot : bool
                 If True, plot periodic signal(s) in temporal basis, gaussian noise, superposition of both
@@ -183,19 +191,20 @@ class SignalFrame:
 
         for i in range(n_freq):
             signal_noiseless += self.cos_gen(a[i], f[i], t_grid)
+        self.temporal = signal_noiseless
 
         if noise_level != 0:
             noise = self.noise(noise_level, a, std)
-            self.temporal = signal_noiseless + noise
+            self.temporal += signal_noiseless
 
         self.rfft()
 
         if plot and noise_level != 0:
 
-            plt.figure(figsize=(14, 12))
+            plt.figure(figsize=(10, 10))
 
             plt.subplot(411)
-            plt.plot(t_grid, signal_noiseless)
+            plt.plot(t_grid, self.temporal)
             plt.xlim((0, 5/np.min(f)))
             plt.title(f'Signal amplitude = {a}, Frequency = {f}, \n  Sampling frequency = {f_sampling}, '
                       f'Observation time = {self.obs_time} s', fontsize=12)
@@ -226,7 +235,7 @@ class SignalFrame:
             plt.subplots_adjust(hspace=0.5)
 
         else:
-            plt.figure(figsize=(14, 9))
+            plt.figure(figsize=(10, 6))
 
             plt.subplot(211)
             plt.plot(t_grid, self.temporal)
@@ -302,7 +311,7 @@ class SignalFrame:
                 Curve of input signal with matplotlib
 
         """
-        plt.figure(figsize=(10, 6))
+        plt.figure(figsize=(10, 4))
 
         if basis == 'temporal':
             plt.plot(self.temporal)
@@ -321,9 +330,142 @@ class SignalFrame:
         plt.yticks(fontsize=12)
         plt.show()
 
+    def sampler_regular(self, rate=0.5, trunc=1, plot=True):
+        """ Method to compute the regular sampled times and measurement matrix associated.
+
+            Parameters
+            ----------
+                trunc : float (default=1)
+                    Signal lenght which have to be considered.
+                        1 = all instants considered
+                        0 = no time considered
+
+                rate : float (default=0.5)
+                    Rate sampling computed as : considered_instants / initial_instants
+                        1 = without sampling
+                        0 = no time kept
+
+                plot : boolean (default=True)
+                   Plot sampling instants on input signal
+
+            Return
+            ------
+                sampling_instants : array of shape = [rate*len]
+                    Sampling instants of input signal.
+
+        """
+
+        signal_trunc = self.temporal[:int(trunc * len(self.temporal))]
+        N_trunc = len(signal_trunc)  # number of samplint points
+
+        dt = int(1/rate)  # temporal step size
+        t_grid = np.arange(0, N_trunc, dt)  # grid space of discretization
+        N_sampled = len(t_grid)
+
+        # Vecteur des instants de l'échantillonnage aléatoire
+        sampling_instants = t_grid.astype('int')
+
+        # temporal signal sampled
+        self.temporal_sampled = self.temporal[sampling_instants]
+        self.freq_sampled = rfft(self.temporal_sampled)/N_sampled
+
+        # Sampling matrix
+        phi = np.zeros((N_sampled, N_trunc), dtype=bool)
+
+        for i in range(N_sampled):
+            phi[i, sampling_instants[i]] = True
+
+        self.phi = csr_matrix(phi)
+
+        print('\nSampling process: \n'
+              '=================\n'              
+              f'Lenght of initial signal : {N_trunc} \n'
+              f'Lenght of sampled signal: {N_sampled}\n'
+              f'Sampling rate : {rate:.3f}')
+
+        if plot:
+            plt.figure(figsize=(10, 4))
+            plt.title('Sampling')
+            plt.plot(np.arange(0, N_trunc), self.temporal)
+            plt.plot(sampling_instants, self.temporal_sampled, 'ro',  mfc='none', markersize=5)
+            plt.xlabel('Times [s]')
+            plt.ylabel('Amplitude')
+            plt.xlim((0, 200))
+            plt.show()
+
+    def sampler_uniform(self, rate=0.5, trunc=1, plot=True):
+        """ Method to compute the non-regular sampled times according uniform distribution and measurement matrix.
+            Value of uniform distribution is limited to [0, dt] with dt = temporal step.
+
+            Parameters
+            ----------
+                trunc : float (default=1)
+                    Signal lenght which have to be considered.
+                        1 = all instants considered
+                        0 = no time considered
+
+                rate : float (default=0.5)
+                    Rate sampling computed as : considered_instants / initial_instants
+                        1 = without sampling
+                        0 = no time kept
+
+                plot : boolean (default=True)
+                   Plot sampling instants on input signal
+
+            Return
+            ------
+                sampling_instants : array of shape = [rate*len]
+                    Sampling instants of input signal.
+
+
+        """
+
+        signal_trunc = self.temporal[:int(trunc * len(self.temporal))]
+        N_trunc = len(signal_trunc)  # number of samplint points
+
+        dt = int(1/rate)  # temporal step size
+        t_grid = np.arange(0, N_trunc, dt)  # grid space of discretization
+        N_sampled = len(t_grid)
+
+        # Computation of random variable between [0, DT]
+        random_instants = np.rint(uniform.rvs(0, dt, size=N_sampled-1))
+        random_instants = np.hstack((random_instants, [0]))
+
+        # Vecteur des instants de l'échantillonnage aléatoire
+        sampling_instants = (t_grid + random_instants).astype('int')
+
+        # temporal signal sampled
+        self.temporal_sampled = self.temporal[sampling_instants]
+        self.freq_sampled = rfft(self.temporal_sampled)/N_sampled
+
+        # Sampling matrix
+        phi = np.zeros((N_sampled, N_trunc), dtype=bool)
+
+        for i in range(N_sampled):
+            phi[i, sampling_instants[i]] = 1
+
+        self.phi = csr_matrix(phi)
+
+        print('\nSampling process: \n'
+              '=================\n'
+              f'Distribution : Uniform\n'              
+              f'Lenght of initial signal : {N_trunc} \n'
+              f'Lenght of sampled signal: {N_sampled}\n'
+              f'Sampling rate : {rate:.3f}')
+
+        if plot:
+            plt.figure(figsize=(10, 4))
+            plt.title('Sampling')
+            plt.plot(np.arange(0, N_trunc), self.temporal)
+            plt.plot(sampling_instants, self.temporal_sampled, 'ro',  mfc='none', markersize=5)
+            plt.xlabel('Times [s]')
+            plt.ylabel('Amplitude')
+            plt.xlim((0, 200))
+            plt.show()
+
     def sampler_gauss(self, rate=0.5, trunc=1, std=1, verbose=False, plot=True):
-        """ Method to compute the list of sampling instants according truncated normal law and sampling matrix.
-            Value of truncated normal law is restricted to [0, dt] with dt = step-temporal. Mean is fixed at
+        """ Method to compute the list of sampling times according truncated normal distribution and measurement matrix.
+            Value of truncated normal distribution is restricted to [0, dt] with dt = temporal step. Mean is fixed at
             middle step temporal.
 
             Parameters
@@ -331,19 +473,19 @@ class SignalFrame:
                 trunc : float (default=1)
                     Signal lenght which have to be considered.
                         1 = all instants considered
-                        0 = no instant considered
+                        0 = no time considered
 
                 rate : float (default=0.5)
                     Rate sampling computed as : considered_instants / initial_instants
                         1 = without sampling
-                        0 = no one instant keep
+                        0 = no time kept
 
                 std : float (default=1)
-                    Standard deviation of truncated normal law.
+                    Standard deviation of truncated normal distribution.
 
                 verbose : boolean (default=0)
-                    If verbose=1, displays parameters of sampling and truncated normal law.
-                    Plot the curve of truncated normal law.
+                    If verbose=1, displays parameters of sampling and truncated normal distribution.
+                    Plot the curve of truncated normal distribution.
 
                 plot : boolean (default=True)
                    Plot sampling instants on input signal
@@ -381,7 +523,7 @@ class SignalFrame:
         self.freq_sampled = rfft(self.temporal_sampled)/N_sampled
 
         # Sampling matrix
-        phi = np.zeros((N_sampled, N_trunc), dtype=int)
+        phi = np.zeros((N_sampled, N_trunc), dtype=bool)
 
         for i in range(N_sampled):
             phi[i, sampling_instants[i]] = 1
@@ -390,14 +532,14 @@ class SignalFrame:
 
         print('\nSampling process: \n'
               '=================\n'
-              f'Law : Truncated gaussian\n'
+              f'Distribution : Truncated gaussian\n'
               f'Mean : centred ; Variance : {std}\n'
               f'Lenght of initial signal : {N_trunc} \n'
               f'Lenght of sampled signal: {N_sampled}\n'
               f'Sampling rate : {rate:.3f}')
 
         if verbose:
-            # Curve of sampling law
+            # Curve of sampling distribution
             x_range = np.linspace(0, end_trunc, 10000)
             plt.plot(x_range, truncnorm.pdf(x_range, a, b, loc=mean, scale=std))
 
@@ -407,11 +549,33 @@ class SignalFrame:
                   f'<= {end_trunc} : {np.all(random_instants <= end_trunc)}\n')
 
         if plot:
-            plt.figure(figsize=(14, 6))
+            plt.figure(figsize=(10, 4))
             plt.title('Sampling')
             plt.plot(np.arange(0, N_trunc), self.temporal)
-            plt.plot(sampling_instants, self.temporal_sampled, 'ro',  mfc='none', markersize=10)
+            plt.plot(sampling_instants, self.temporal_sampled, 'ro',  mfc='none', markersize=5)
             plt.xlabel('Times [s]')
             plt.ylabel('Amplitude')
             plt.xlim((0, 200))
             plt.show()
+
+    @staticmethod
+    def max_amplitude(signal, threshold):
+        """
+
+        Parameters
+        ----------
+        signal : ndarray
+            Signal input
+
+        threshold : float
+            Only displays frequencies over this threshold.
+
+        Returns
+        -------
+        result : ndarray
+            Column on the left is frequency and column on the right is amplitude.
+
+        """
+        freq_filtered = np.argwhere(np.abs(signal) > threshold)
+        result = np.concatenate((freq_filtered, abs(signal[freq_filtered])), axis=1)
+        return result

@@ -47,7 +47,7 @@ class SignalFrame:
         self.len = 0
         self.phi = np.array(0)
 
-    def read_wave(self, filename):
+    def read_wave(self, filename, coeff_amplitude=1):
         """ Convert wav file in numpy array.
 
             Parameters
@@ -55,9 +55,12 @@ class SignalFrame:
             filename : basestring
                 Path to input wav
 
+            coeff_amplitude : float
+                Coefficient to apply to amplitude if needed to rescale
+
             Returns
             -------
-            temporal : array, shape = [len]
+            temporal : SignalFrame
                 Return signal expressed in temporal basis, in numpy array format
 
         """
@@ -65,18 +68,23 @@ class SignalFrame:
         wf = wave.open(filename)
         self.len = wf.getnframes()  # Returns number of audio frames
         frames = wf.readframes(self.len)  # Read len frame, as a string of bytes
-        self.temporal = np.frombuffer(frames, dtype=np.int16)  # 1-D numpy array
+        self.temporal = coeff_amplitude*np.frombuffer(frames, dtype=np.int16)  # 1-D numpy array
+        self.detrend().rfft()
         wf.close()
-
-        if not np.rint((np.mean(self.temporal))) :
-            print('Warning : DC bias (Mean of signal) is not null. \n'
-                  'DC bias will affect FT with non null amplitude at freq = 0. \n'
-                  'It is recommended to apply detrend() method to signal or remove mean manually.\n')
 
         return self
 
-    def detrend(self, signal):
+    def detrend(self):
+        """
+        Detrend input signal, i.e. substracts the mean, in order to avoid DC bias.
+
+        Returns
+        -------
+            self
+        """
         self.temporal = detrend(self.temporal)
+
+        return self
 
     @staticmethod
     def cos_gen(a, f, t_grid):
@@ -90,7 +98,7 @@ class SignalFrame:
             f : float
                 Signal frequency [Hz]
 
-            t_grid : bytearray
+            t_grid : ndarray
                 Temporal grid for for computation of cosinus [s]
 
             Returns
@@ -206,31 +214,32 @@ class SignalFrame:
             plt.subplot(411)
             plt.plot(t_grid, self.temporal)
             plt.xlim((0, 5/np.min(f)))
-            plt.title(f'Signal amplitude = {a}, Frequency = {f}, \n  Sampling frequency = {f_sampling}, '
-                      f'Observation time = {self.obs_time} s', fontsize=12)
-            plt.xlabel('Time [s]', fontsize=12)
-            plt.ylabel('Amplitude', fontsize=12)
+            plt.title(f'Signal y(t) in temporal basis. Amplitude = {a}, Frequency = {f}, \n  '
+                      f'Sampling frequency = {f_sampling}, Observation time = {self.obs_time} s', fontsize=12)
+            plt.xlabel('Time t', fontsize=12)
+            plt.ylabel('Amplitude y(t)', fontsize=12)
 
             plt.subplot(412)
-            plt.title(f'Mean of gaussian noise = 0 and standard deviation = {std}', fontsize=12)
+            plt.title(f'Signal y(t) in temporal basis.\n'
+                      f'Mean of gaussian noise = 0 and standard deviation = {std}', fontsize=12)
             plt.plot(t_grid, noise)
             plt.xlim((0, 5/np.min(f)))
-            plt.xlabel('Time [s]', fontsize=12)
-            plt.ylabel('Amplitude', fontsize=12)
+            plt.xlabel('Time t', fontsize=12)
+            plt.ylabel('Amplitude y(t)', fontsize=12)
 
             plt.subplot(413)
-            plt.title('Noisy signal', fontsize=12)
+            plt.title('Noisy signal y_s(t) = y(t) + s(t)', fontsize=12)
             plt.plot(t_grid, self.temporal)
             plt.xlim((0, 5/np.min(f)))
-            plt.xlabel('Time [s]', fontsize=12)
-            plt.ylabel('Amplitude', fontsize=12)
+            plt.xlabel('Time t', fontsize=12)
+            plt.ylabel('Amplitude y_s(t)', fontsize=12)
 
             plt.subplot(414)
             plt.plot(f_grid, abs(self.freq))
             plt.xlim(0, np.max(f) * 1.1)
-            plt.title('Signal in frequency basis', fontsize=12)
-            plt.xlabel('Frequency [Hz]', fontsize=12)
-            plt.ylabel('Amplitude', fontsize=12)
+            plt.title('Signal Y(w) in frequency basis', fontsize=12)
+            plt.xlabel('Frequency w', fontsize=12)
+            plt.ylabel('Amplitude Y(w)', fontsize=12)
 
             plt.subplots_adjust(hspace=0.5)
 
@@ -240,17 +249,17 @@ class SignalFrame:
             plt.subplot(211)
             plt.plot(t_grid, self.temporal)
             plt.xlim((0, 5/np.min(f)))
-            plt.title(f'Signal amplitude = {a}, Frequency = {f}, \n  Sampling frequency = {f_sampling}, '
-                      f'Observation time = {self.obs_time} s', fontsize=12)
-            plt.xlabel('Time [s]', fontsize=12)
-            plt.ylabel('Amplitude', fontsize=12)
+            plt.title(f'Signal y(t) in temporal basis. Amplitude = {a}, Frequency = {f}, \n  '
+                      f'Sampling frequency = {f_sampling}, Observation time = {self.obs_time} s', fontsize=12)
+            plt.xlabel('Time t', fontsize=12)
+            plt.ylabel('Amplitude y(t)', fontsize=12)
 
             plt.subplot(212)
             plt.plot(f_grid, abs(self.freq))
             plt.xlim(0, np.max(f) * 1.1)
-            plt.title('Signal in frequency basis', fontsize=12)
-            plt.ylabel('Amplitude', fontsize=12)
-            plt.xlabel('Frequency [Hz]', fontsize=12)
+            plt.title('Signal Y(w) in frequency basis', fontsize=12)
+            plt.xlabel('Frequency w', fontsize=12)
+            plt.ylabel('Amplitude Y(w)', fontsize=12)
 
             plt.subplots_adjust(hspace=0.3)
 
@@ -269,6 +278,8 @@ class SignalFrame:
         """
 
         self.freq = rfft(self.temporal)/self.len
+
+        return self
 
     def ifft(self):
         """ Compute inverse fast Fourier transformation of frequency signal.
@@ -295,7 +306,7 @@ class SignalFrame:
         except TypeError:
             print('Nyquist–Shannon criterion (rate) : \'NA\' \n')
 
-    def plot(self, basis):
+    def plot(self, basis, obs_time=1, f_sampling=1):
         """ Plot signal in temporal or frequency basis.
 
             Parameters
@@ -305,22 +316,30 @@ class SignalFrame:
                     temporal = temporal
                     freq = frequency
 
+            obs_time : float (default = 1)
+                Observation time to consider for x axis.
+
+            f_sampling : float (default = 1)
+                Sampling frequecy
+
             Returns
             -------
             Plot : matplotlib.pyplot.plt
-                Curve of input signal with matplotlib
+                Plot of input signal with matplotlib.
 
         """
         plt.figure(figsize=(10, 4))
 
         if basis == 'temporal':
-            plt.plot(self.temporal)
+
+            t_grid = np.linspace(0, obs_time, self.len)
+            plt.plot(t_grid, self.temporal)
             plt.title('Signal in temporal basis', fontsize=12)
             plt.xlabel('Time [s]', fontsize=12)
 
         if basis == 'freq':
+            f_grid = np.linspace(0, f_sampling/2, self.len)
             signal_f_std = self.freq
-            f_grid = np.arange(0, self.len)
             plt.plot(f_grid, abs(signal_f_std))
             plt.title('Signal in frequency basis', fontsize=12)
             plt.xlabel('Frequency [Hz]', fontsize=12)
@@ -558,8 +577,7 @@ class SignalFrame:
             plt.xlim((0, 200))
             plt.show()
 
-    @staticmethod
-    def max_amplitude(signal, threshold):
+    def max_amplitude(self, threshold):
         """
 
         Parameters
@@ -576,6 +594,6 @@ class SignalFrame:
             Column on the left is frequency and column on the right is amplitude.
 
         """
-        freq_filtered = np.argwhere(np.abs(signal) > threshold)
-        result = np.concatenate((freq_filtered, abs(signal[freq_filtered])), axis=1)
+        freq_filtered = np.argwhere(np.abs(self.freq) > threshold)
+        result = np.concatenate((freq_filtered, abs(self.freq[freq_filtered])), axis=1)
         return result

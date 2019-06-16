@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 from scipy.fftpack import fft, ifft, fftshift, ifftshift, rfft, irfft
 from scipy.stats import truncnorm, uniform
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, coo_matrix
 from scipy.signal import detrend
 
 
@@ -375,7 +375,7 @@ class SignalFrame:
         """
 
         signal_trunc = self.temporal[:int(trunc * len(self.temporal))]
-        N_trunc = len(signal_trunc)  # number of samplint points
+        N_trunc = len(signal_trunc)  # number of sampling points
 
         dt = int(1/rate)  # temporal step size
         t_grid = np.arange(0, N_trunc, dt)  # grid space of discretization
@@ -389,10 +389,8 @@ class SignalFrame:
         self.freq_sampled = rfft(self.temporal_sampled)/N_sampled
 
         # Sampling matrix
-        phi = np.zeros((N_sampled, N_trunc), dtype=bool)
-
-        for i in range(N_sampled):
-            phi[i, sampling_instants[i]] = True
+        phi = coo_matrix(([True]*N_sampled, (range(N_sampled), sampling_instants)),
+                         shape=(N_sampled, N_trunc), dtype=bool)
 
         self.phi = csr_matrix(phi)
 
@@ -410,9 +408,10 @@ class SignalFrame:
             plt.xlabel('Times [s]')
             plt.ylabel('Amplitude')
             plt.xlim((0, 200))
+            plt.grid(True)
             plt.show()
 
-    def sampler_uniform(self, rate=0.5, trunc=1, plot=True):
+    def sampler_uniform(self, rate=0.5, trunc=1, verbose=True, plot=True):
         """ Method to compute the non-regular sampled times according uniform distribution and measurement matrix.
             Value of uniform distribution is limited to [0, dt] with dt = temporal step.
 
@@ -424,18 +423,20 @@ class SignalFrame:
                         0 = no time considered
 
                 rate : float (default=0.5)
-                    Rate sampling computed as : considered_instants / initial_instants
+                    Rate sampling computed as : considered_instants / initial_instants.
                         1 = without sampling
                         0 = no time kept
 
+                verbose : boolean (default=False)
+                    Display information about the sampling performed.
+
                 plot : boolean (default=True)
-                   Plot sampling instants on input signal
+                    Plot sampling instants on input signal.
 
             Return
             ------
                 sampling_instants : array of shape = [rate*len]
                     Sampling instants of input signal.
-
 
         """
 
@@ -458,19 +459,18 @@ class SignalFrame:
         self.freq_sampled = rfft(self.temporal_sampled)/N_sampled
 
         # Sampling matrix
-        phi = np.zeros((N_sampled, N_trunc), dtype=bool)
+        phi = coo_matrix(([True]*N_sampled, (range(N_sampled), sampling_instants)),
+                         shape=(N_sampled, N_trunc), dtype=bool)
+        self.phi = csr_matrix(phi, dtype=bool)
 
-        for i in range(N_sampled):
-            phi[i, sampling_instants[i]] = 1
+        if verbose:
 
-        self.phi = csr_matrix(phi)
-
-        print('\nSampling process: \n'
-              '=================\n'
-              f'Distribution : Uniform\n'              
-              f'Lenght of initial signal : {N_trunc} \n'
-              f'Lenght of sampled signal: {N_sampled}\n'
-              f'Sampling rate : {rate:.3f}')
+            print('\nSampling process: \n'
+                  '=================\n'
+                  f'Distribution : Uniform\n'              
+                  f'Lenght of initial signal : {N_trunc} \n'
+                  f'Lenght of sampled signal: {N_sampled}\n'
+                  f'Sampling rate : {rate:.3f}')
 
         if plot:
             plt.figure(figsize=(10, 4))
@@ -480,6 +480,7 @@ class SignalFrame:
             plt.xlabel('Times [s]')
             plt.ylabel('Amplitude')
             plt.xlim((0, 200))
+            plt.grid(True)
             plt.show()
 
     def sampler_gauss(self, rate=0.5, trunc=1, std=1, verbose=False, plot=True):
@@ -542,11 +543,8 @@ class SignalFrame:
         self.freq_sampled = rfft(self.temporal_sampled)/N_sampled
 
         # Sampling matrix
-        phi = np.zeros((N_sampled, N_trunc), dtype=bool)
-
-        for i in range(N_sampled):
-            phi[i, sampling_instants[i]] = 1
-
+        phi = coo_matrix(([True]*N_sampled, (range(N_sampled), sampling_instants)),
+                         shape=(N_sampled, N_trunc), dtype=bool)
         self.phi = csr_matrix(phi)
 
         print('\nSampling process: \n'
@@ -575,6 +573,7 @@ class SignalFrame:
             plt.xlabel('Times [s]')
             plt.ylabel('Amplitude')
             plt.xlim((0, 200))
+            plt.grid(True)
             plt.show()
 
     def max_amplitude(self, threshold):

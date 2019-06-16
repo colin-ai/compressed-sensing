@@ -2,8 +2,17 @@ from pyCompressSensing.SignalFrame import SignalFrame
 
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.fftpack import irfft, rfft
 
-from scipy.fftpack import fft, ifft, irfft, rfft
+# import pyfftw
+# from pyfftw.interfaces.scipy_fftpack import irfft, rfft
+# import multiprocessing
+#
+# # Configure PyFFTW to use all cores (the default is single-threaded)
+# pyfftw.config.NUM_THREADS = multiprocessing.cpu_count()
+#
+# # Turn on the cache for optimum performance
+# pyfftw.interfaces.cache.enable()
 
 
 class L1min:
@@ -13,8 +22,8 @@ class L1min:
     x^hat = argmin_x |y-Ax|^2 + |x|_1
     """
 
-    def solver(self, signal_sampled, phi, lambda_n=1, gamma=0.5, w=100, max_iter=100,
-               cv_criterium=1e-3, obs_time=1, verbose=0, tol_null=1e-16, plot=False):
+    def solver(self, signal_sampled, phi, lambda_n=1, gamma=0.5, w=100, max_iter=100,cv_criterium=1e-5, tol_null=1e-16,
+               verbose=0, plot=False, f_sampling=1):
         """ Algorithm for OLS minimization with L1-constraint
 
             x^hat = argmin_x |y-Ax|^2 + |x|_1
@@ -46,16 +55,15 @@ class L1min:
                 Tolerance to consider value as 0.
                 Tolerance = 0 has no effect
 
-            obs_time : float
-                Obervation time of signal, used for x axis.
-                If unknown, time and frequencies axis will not be revelant
-
             verbose : boolean (default=0)
                 If verbose=1, displays parameters of sampling and truncated normal law.
                 Plot the curve of truncated normal law.
 
             plot :
                 Plot recovered signal, histogram of recovered signal, values of objective function and norm l1
+
+            f_sampling : float
+                Sampling frequency. Only used for plot x-axis values.
 
             Return
             ------
@@ -66,37 +74,43 @@ class L1min:
 
         # TODO : add Lipshitz to regularization w such as w = lambda / L
 
-        # Initialisation du x_hat = signal à reconstruire en frequentiel
-        signal_length = phi.get_shape()[1]
-        y = signal_sampled
-        #x_hat = np.full(signal_length, 1e5)
-        x_hat = np.random.uniform(low=0.0, high=np.max(signal_sampled), size=signal_length)
-
-        # Initialisation values
-        iteration = 0
+        # Data solved
         data_fidelity = list()
         objective_fct = list()
         l1_norm = list()
 
+        # Initialisation du x_hat = signal à reconstruire en frequentiel
+        signal_length = phi.get_shape()[1]
+        y = signal_sampled
+        x_hat = np.zeros(signal_length)
+#        x_hat = pyfftw.empty_aligned(signal_length, dtype='f8')
+
+        # Constants
+        Rn = np.sqrt(signal_length)
+        c1 = np.real(rfft(phi.T @ y))/Rn
+
+        # Initialisation values
+        iteration = 0
+        f1 = phi @ irfft(x_hat) * Rn
+
         while iteration < max_iter:
 
-            f1 = phi @ irfft(x_hat)
-            grad = rfft(phi.T @ f1) - np.real(rfft(phi.T @ y))
+            grad = rfft(phi.T @ f1)/Rn - c1
             z = x_hat - gamma * grad
-            x_hat = x_hat + lambda_n * \
-                    (self.soft_threshold(np.real(z), w)  - x_hat)
+            x_hat = x_hat + lambda_n*(self.soft_threshold(np.real(z), w) - x_hat)
+            f1 = phi @ irfft(x_hat) * Rn
 
             l1_norm.append(np.linalg.norm(x_hat, 1))
-            data_fidelity.append(np.linalg.norm(y - f1, 2))
-            objective_fct.append(data_fidelity[iteration] + lambda_n * l1_norm[iteration])
+            data_fidelity.append((np.linalg.norm(y - f1, 2))**2)
+            objective_fct.append(data_fidelity[iteration] + w * l1_norm[iteration])
 
             if verbose:
-                print('Iteration : ', iteration)
-                print(f'Data fidelity : {data_fidelity[iteration]:.0f}')
-                print(f'L1-norm of X_hat : {l1_norm[iteration]:.0f}')
-                print(f'Objective function : {objective_fct[iteration]:.0f}\n')
+                print(f'Iteration : {iteration} \n'
+                      f'Data fidelity : {data_fidelity[iteration]:.0f}\n'
+                      f'L1-norm of X_hat : {l1_norm[iteration]:.0f}\n'
+                      f'Objective function : {objective_fct[iteration]:.0f}\n')
 
-            if iteration > 0 and cv_criterium != 0:
+            if iteration > 0 and cv_criterium != 0 and objective_fct[iteration] < objective_fct[iteration-1]:
                 if (np.abs(objective_fct[iteration]-objective_fct[iteration-1]))/objective_fct[iteration] \
                         < cv_criterium:
                     print(f'Convergence has been reached at iteration = {iteration}')
@@ -106,12 +120,11 @@ class L1min:
 
         # Set small values to 0
         x_hat.real[abs(x_hat.real) < tol_null] = 0.0
-#        x_hat.imag[abs(x_hat.imag) < tol_null] = 0.0
 
-        s_recovered = SignalFrame()
-        s_recovered.freq = x_hat/len(x_hat)
-        s_recovered.len = int(len(s_recovered.freq))
-        s_recovered.temporal = irfft(x_hat)
+        recovered_signal = SignalFrame()
+        recovered_signal.freq = x_hat/Rn
+        recovered_signal.len = int(len(recovered_signal.freq))
+        recovered_signal.temporal = irfft(x_hat*Rn)
 
         if plot:
 
@@ -119,25 +132,24 @@ class L1min:
             gs = fig.add_gridspec(3, 2)
 
             ax_df = fig.add_subplot(gs[0, 0], title='Data fidelity', xlabel='Iteration')
-            self.my_plotter(ax_df, data_fidelity)
+            ax_df.plot(data_fidelity)
 
             ax_l1 = fig.add_subplot(gs[0, 1], title='L1-norm of recovered signal', xlabel='Iteration')
-            self.my_plotter(ax_l1, l1_norm)
+            ax_l1.plot(l1_norm)
 
             ax_of = fig.add_subplot(gs[1, 0], title='Objective function', xlabel='Iteration')
-            self.my_plotter(ax_of, objective_fct)
+            ax_of.plot(objective_fct)
 
             ax_hist = fig.add_subplot(gs[1, 1], title='Histogram of recovered signal')
             ax_hist.hist(x_hat.real, bins=50)
 
             ax_res = fig.add_subplot(gs[2, :], title='Recovered signal in frequency basis', xlabel='Frequency')
-            f_grid = np.arange(0, s_recovered.len/2)/obs_time
-            signal = x_hat[0:int(s_recovered.len/2)].real
-            self.my_plotter(ax_res, y=np.abs(signal), x=f_grid)
+            f_grid = np.linspace(0, f_sampling/2, recovered_signal.len)
+            ax_res.plot(f_grid, np.abs(recovered_signal.freq))
 
             plt.show()
 
-        return s_recovered
+        return recovered_signal
 
     @staticmethod
     def soft_threshold(x, w):
@@ -181,7 +193,7 @@ class L1min:
         ax_t.plot(t_grid, real_signal_t_trunc,
                   label='Real signal', alpha=0.7)
         ax_t.plot(t_grid, recovered_signal.temporal,
-                  label='Signal recovered', alpha=0.7)
+                  label='Recovered signal', alpha=0.7)
         ax_t.legend()
 
         # Plot 2 : frequency basis
@@ -197,37 +209,6 @@ class L1min:
                   label=f'Signal recovered, with ' f'{np.linalg.norm(recovered_signal.freq, 0)} values',
                   alpha=0.8)
         ax_f.legend()
-
-    @staticmethod
-    def my_plotter(ax,  y, x=False, **param_dict):
-        """
-        A helper function to make a graph
-
-        Parameters
-        ----------
-        ax : Axes
-            The axes to draw to
-
-        x : array
-           The x data
-
-        y : array
-           The y data
-
-        param_dict : dict
-           Dictionary of kwargs to pass to ax.plot
-
-        Returns
-        -------
-        out : list
-            list of artists added
-        """
-        if x is False:
-            axes = ax.plot(y, **param_dict)
-        else:
-            axes = ax.plot(x, y, **param_dict)
-
-        return axes
 
     @staticmethod
     def indicator_gear(signal, fe, f_gears):

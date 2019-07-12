@@ -47,7 +47,7 @@ class SignalFrame:
         self.len = 0
         self.phi = np.array(0)
 
-    def read_wave(self, filename, coeff_amplitude=1):
+    def read_wave(self, filename, coeff_amplitude=1,trunc=1):
         """ Convert wav file in numpy array.
 
             Parameters
@@ -57,6 +57,9 @@ class SignalFrame:
 
             coeff_amplitude : float
                 Coefficient to apply to amplitude if needed to rescale
+            
+            trunc : float
+                truncate signal ratio
 
             Returns
             -------
@@ -69,10 +72,12 @@ class SignalFrame:
         self.len = wf.getnframes()  # Returns number of audio frames
         frames = wf.readframes(self.len)  # Read len frame, as a string of bytes
         self.temporal = coeff_amplitude*np.frombuffer(frames, dtype=np.int16)  # 1-D numpy array
+        self.temporal = self.temporal[:int(trunc * len(self.temporal))]
         self.detrend().rfft()
         wf.close()
 
         return self
+
 
     def detrend(self):
         """

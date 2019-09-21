@@ -31,7 +31,7 @@ class L1min:
             Parameters
             ----------
             signal_sampled : ndarray
-                Sampled signal in temporal basis
+                Sampled signal in time basis
 
             phi : scipy.sparse.csr_matrix
                 Random sampling matrix
@@ -68,7 +68,7 @@ class L1min:
             Return
             ------
             signal_t_recovered : array of shape = []
-                Signal recovered expressed in temporal basis
+                Signal recovered expressed in time basis
 
         """
 
@@ -83,7 +83,6 @@ class L1min:
         signal_length = phi.get_shape()[1]
         y = signal_sampled
         x_hat = np.zeros(signal_length)
-#        x_hat = pyfftw.empty_aligned(signal_length, dtype='f8')
 
         # Constants
         Rn = np.sqrt(signal_length)
@@ -124,7 +123,7 @@ class L1min:
         recovered_signal = SignalFrame()
         recovered_signal.freq = x_hat/Rn
         recovered_signal.len = int(len(recovered_signal.freq))
-        recovered_signal.temporal = irfft(x_hat*Rn)
+        recovered_signal.time = irfft(x_hat*Rn)
 
         if plot:
 
@@ -182,8 +181,8 @@ class L1min:
 
         """
 
-        # Plot 1 : temporal basis
-        real_signal_t_trunc = real_signal.temporal[:recovered_signal.len]  # To avoid mismatch dimension with truncated input signal
+        # Plot 1 : time basis
+        real_signal_t_trunc = real_signal.time[:recovered_signal.len]  # To avoid mismatch dimension with truncated input signal
         t_grid = np.linspace(0, obs_time, recovered_signal.len)
 
         fig = plt.figure(figsize=(8, 6), constrained_layout=True)
@@ -192,7 +191,7 @@ class L1min:
         ax_t = fig.add_subplot(gs[0, :], xlabel='Time t', ylabel='Amplitude y(t)')
         ax_t.plot(t_grid, real_signal_t_trunc,
                   label='Real signal', alpha=0.7)
-        ax_t.plot(t_grid, recovered_signal.temporal,
+        ax_t.plot(t_grid, recovered_signal.time,
                   label='Recovered signal', alpha=0.7)
         ax_t.legend()
 
@@ -211,6 +210,36 @@ class L1min:
         ax_f.legend()
 
     @staticmethod
-    def indicator_gear(signal, fe, f_gears):
-        indic = np.sum(signal[f_gears] ** 2) / signal[fe] ** 2
-        return indic
+    def indicator_gear(signal, fe, n_tooth, n_fe=1, M_fg=8, N_vicinity=2):
+        S_gear = []
+
+        fe = fe * n_fe
+        sideband = fe * 0.5 / n_tooth
+
+        m_fg_v = [int(fe + sideband * m) for m in range(-M_fg, M_fg + 1) if m != 0]
+
+        n_vicinity_v = [n for n in range(-N_vicinity, N_vicinity + 1)]
+
+        for m_fg in m_fg_v:
+            fg = [m_fg + k for k in n_vicinity_v]
+            S_gear.append(np.mean(signal[fg]))
+
+        S_mesh = signal[fe]
+        indicator = ((np.array(S_gear) ** 2).sum()) / S_mesh ** 2
+
+        return indicator
+
+    @staticmethod
+    def rms(signal):
+        rms_value = np.sqrt((signal ** 2).mean())
+        return rms_value
+
+    def crest_factor(self, signal):
+        indicator = np.max(signal)/self.rms(signal)
+        return indicator
+
+    @staticmethod
+    def kurtosis(signal):
+        N = len(signal)
+        indicator = N * np.mean((signal - signal.mean()) ** 4) / np.mean((signal - signal.mean()) ** 2) ** 2
+        return indicator

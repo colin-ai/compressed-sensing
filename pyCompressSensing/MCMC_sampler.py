@@ -18,8 +18,8 @@ from scipy.fftpack import fft, ifft
 
 from SignalFrame import *
 #Set proxy if needed
-os.environ["http_proxy"] = "http://proxy-internet-aws-eu.subsidia.org:3128"
-os.environ["https_proxy"] = "http://proxy-internet-aws-eu.subsidia.org:3128"
+#os.environ["http_proxy"] = "http://proxy-internet-aws-eu.subsidia.org:3128"
+#os.environ["https_proxy"] = "http://proxy-internet-aws-eu.subsidia.org:3128"
 
 #https://rpy2.readthedocs.io/en/version_2.8.x/introduction.html#r-packages
 
@@ -56,7 +56,7 @@ r_MASS = importr('MASS') #used for multivariate Normal distribution
 
 
 
-#General fnctions
+#General functions
 def sample_gauss(size):
     return np.random.normal(loc=0.0, scale=1.0,size=size)
 
@@ -201,15 +201,15 @@ def gibbs(y, iters, init, hypers,phi):
 
 #Compression of signal ( uniform)
 sf = SignalFrame()
-s01 = sf.read_wave('../data/CETIM.wav', coeff_amplitude=1/10000,trunc=0.0125)
+s01 = sf.read_wave('../data/signal.wav', coeff_amplitude=1/10000,trunc=0.0125)
 s01.sampler_uniform(rate=0.3)
-signal_sampled_uni_r03 = s01.temporal_sampled
+signal_sampled_uni_r03 = s01.time_sampled
 phi_uni_r03 = s01.phi
 
 
 
 y = signal_sampled_uni_r03
-N = len(s01.temporal)
+N = len(s01.time_sampled)
 
 
 #Init of hyperparameters

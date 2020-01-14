@@ -3,17 +3,13 @@
 import sys,os
 import numpy as np
 import readline
-from rpy2.rinterface import R_VERSION_BUILD
-print(R_VERSION_BUILD)
-import rpy2.robjects as robjects
-import rpy2.robjects.numpy2ri
 import math
 import datetime
 import pandas as pd
-import seaborn as sns
+#import seaborn as sns
 
 from scipy.fftpack import fft, ifft
-
+from scipy.stats import geninvgauss,gamma
 
 #Import compressivesesning libs
 #sys.path.insert(0,"..")
@@ -22,40 +18,6 @@ from SignalFrame import *
 #Set proxy if needed
 os.environ["http_proxy"] = "http://proxy-internet-aws-eu.subsidia.org:3128"
 os.environ["https_proxy"] = "http://proxy-internet-aws-eu.subsidia.org:3128"
-
-#https://rpy2.readthedocs.io/en/version_2.8.x/introduction.html#r-packages
-
-# import rpy2's package module
-import rpy2.robjects.packages as rpackages
-
-# import R's utility package
-utils = rpackages.importr('utils')
-
-# select a mirror for R packages
-utils.chooseCRANmirror(ind=1) # select the first mirror in the list
-
-# Install dependencies
-packnames = ['GeneralizedHyperbolic','MASS']
-names_to_install = [x for x in packnames if (not rpackages.isinstalled(x))]
-
-# R vector of strings
-from rpy2.robjects.vectors import StrVector
-
-# Selectively install what needs to be install.
-# We are fancy, just because we can.
-
-if len(names_to_install) > 0:
-    utils.install_packages(StrVector(names_to_install))
-    
-    
-#Imports R packages
-#see https://cran.r-project.org/web/views/Distributions.html
-from rpy2.robjects.packages import importr
-r_GIG = importr('GeneralizedHyperbolic') #used for Generalized Gaussian Inverse distribution
-r_stats = importr('stats') #used for Normal, gamma distribution
-r_MASS = importr('MASS') #used for multivariate Normal distribution
-
-
 
 
 #General fnctions
@@ -132,10 +94,9 @@ def sample_gamma(_lambda,x):
         b_chi =  _lambda*math.pow(np.real(x_n),2)
         a_psi = 1
         c_lambda = 1/2
-        param = robjects.FloatVector([b_chi,a_psi,c_lambda])
-        #Dnas le package les param : c(chi, psi, lambda) = b,a,c
-        gamma_n.append(np.array(r_GIG.rgig(1,param = param))[0])
-    return np.array(gamma_n)
+        rv = geninvgauss.rvs(c_lambda, np.sqrt(b_chi*a_psi), loc=0, scale=np.sqrt(a_psi/b_chi), size=1, random_state=None)
+        gamma_n.append(rv)
+    return np.concatenate(gamma_n).ravel()
 
 
 def sample_lambda(x,gamma_r,gamma_i,a_lambda = 1e-6,b_lambda = 1e-6):
@@ -143,11 +104,17 @@ def sample_lambda(x,gamma_r,gamma_i,a_lambda = 1e-6,b_lambda = 1e-6):
     shape = N+a_lambda
     x_r = np.real(x)
     x_i = np.imag(x)
-    
-    rate = np.real(b_lambda + (1/2)*((x_r.T@np.linalg.inv(np.diag(gamma_r))@x_r) +\
-                              (x_i.T@np.linalg.inv(np.diag(gamma_i))@x_i)))
 
-    return np.array(r_stats.rgamma(1, shape = shape, rate = rate))
+    diag_gamma_r = np.diag(gamma_r)
+    diag_gamma_i = np.diag(gamma_i)
+    
+    np.fill_diagonal(diag_gamma_r, 1/diag_gamma_r.diagonal())
+    np.fill_diagonal(diag_gamma_i, 1/diag_gamma_i.diagonal())
+    
+    rate = np.real(b_lambda + (1/2)*((x_r.T@diag_gamma_r@x_r) +\
+                              (x_i.T@diag_gamma_i@x_i)))
+
+    return gamma.rvs(a=shape,scale=1/rate, size=1, random_state=None)
 
 def sample_tau(x,y,phi,a_tau = 1e-6,b_tau = 1e-6):
     M = y.shape[0]
@@ -155,8 +122,7 @@ def sample_tau(x,y,phi,a_tau = 1e-6,b_tau = 1e-6):
     #M au lieu de M/2 car partie relle et partie complexe
     shape = (M)+a_tau
     rate = b_tau + (1/2)*(math.pow(np.linalg.norm(y - phi@psi_inv(x,math.sqrt(N)),2),2))
-    return np.array(r_stats.rgamma(1, shape = shape, rate = rate)) 
-
+    return gamma.rvs(a=shape,scale=1/rate, size=1, random_state=None)
 
 def gibbs(y, iters, init, hypers,phi):
     #Init parameters

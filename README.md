@@ -1,2 +1,2 @@
-# Compress sensing toolbox
-The aim of this python class is to proposed an easy and efficient way to compress and recovered perdioc signal wit L1 minimization solver. 
+# Compressed sensing
+The aim of `compressed-sensing` package is to provide an easy and efficient way to compress and recovered perdioc signal with L1 minimization solver. 
